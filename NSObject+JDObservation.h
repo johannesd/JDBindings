@@ -1,5 +1,5 @@
 //
-//  NSObject+Observation.h
+//  NSObject+JDObservation.h
 //
 //  Created by Johannes Dörr on 23.09.12.
 //
@@ -24,7 +24,7 @@
 @end
 
 
-@interface NSObject (Observation)
+@interface NSObject (JDObservation)
 
 - (void)unobserveKeyPaths:(NSArray *)keyPaths withObserver:(NSObject *)observer withSelector:(SEL)selector;
 - (void)unobserveKeyPath:(NSString *)keyPath withObserver:(NSObject *)observer withSelector:(SEL)selector;
