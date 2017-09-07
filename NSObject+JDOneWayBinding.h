@@ -34,10 +34,13 @@ typedef id (^JDTransformBlockType)(id);
 @interface NSObject (JDOneWayBinding)
 
 - (void)bind:(NSString *)property toObject:(NSObject *)object withKeyPath:(NSString *)keyPath;
+- (void)bind:(NSString *)property toObject:(NSObject *)object withKeyPath:(NSString *)keyPath or:(id)defaultValue;
 - (void)bind:(NSString *)property toObject:(NSObject *)object withKeyPath:(NSString *)keyPath withTransform:(JDTransformBlockType)transform;
 - (void)bind:(NSString *)property toObject:(NSObject *)object withKeyPath:(NSString *)keyPath withTransform:(JDTransformBlockType)transform skipEqualsCheckVal:(BOOL)skipEqualsCheckVal;
 - (void)bind:(NSString *)property toObject:(NSObject *)object withKeyPaths:(NSArray *)keyPaths withTransform:(JDTransformBlockType)transform;
 - (void)bind:(NSString *)property toObject:(NSObject *)object withKeyPaths:(NSArray *)keyPaths withTransform:(JDTransformBlockType)transform skipEqualsCheckVal:(BOOL)skipEqualsCheckVal;
 - (void)removeAllBindings;
+
++ (JDTransformBlockType)invertNumberTransform;
 
 @end

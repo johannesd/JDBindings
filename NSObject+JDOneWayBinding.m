@@ -18,7 +18,7 @@ static char bindingsKey;
              andSender:(NSObject *)aSender
            andKeyPaths:(NSArray *)theKeyPaths
           andTransform:(JDTransformBlockType)aTransform
-       skipEqualsCheck:(BOOL)skipEqualsCheckVal;
+       skipEqualsCheck:(BOOL)skipEqualsCheckVal
 {
     if (self = [super init]) {
         receiver = aReceiver;
@@ -48,7 +48,7 @@ static char bindingsKey;
 {
     if (object != sender || ![keyPaths containsObject:aKeyPath]) return;
     id newValue = [change objectForKey:NSKeyValueChangeNewKey];
-    BOOL isImmutable = ([newValue isKindOfClass:([NSString class])] || [newValue isKindOfClass:([NSNumber class])]);
+    BOOL isImmutable = ([newValue isKindOfClass:([NSString class])] || [newValue isKindOfClass:([NSNumber class])] || [newValue isKindOfClass:([NSValue class])]);
     if (skipEqualsCheck ||
         (isImmutable && ![[change objectForKey:NSKeyValueChangeNewKey] isEqual:[change objectForKey:NSKeyValueChangeOldKey]]) ||
         (!isImmutable && [change objectForKey:NSKeyValueChangeNewKey] != [change objectForKey:NSKeyValueChangeOldKey])) {
@@ -78,7 +78,15 @@ static char bindingsKey;
 
 - (void)bind:(NSString *)property toObject:(NSObject *)object withKeyPath:(NSString *)keyPath
 {
+    [self bind:property toObject:object withKeyPath:keyPath or:nil];
+}
+
+- (void)bind:(NSString *)property toObject:(NSObject *)object withKeyPath:(NSString *)keyPath or:(id)defaultValue;
+{
     JDTransformBlockType transform = ^(id value) {
+        if (value == nil) {
+            return defaultValue;
+        }
         return value;
     };
     [self bind:property toObject:object withKeyPath:keyPath withTransform:transform skipEqualsCheckVal:FALSE];
@@ -128,6 +136,13 @@ static char bindingsKey;
     if (bindings != nil) {
         [bindings removeAllObjects];
     }
+}
+
++ (JDTransformBlockType)invertNumberTransform
+{
+    return ^NSNumber *(NSNumber *val) {
+        return @(![val boolValue]);
+    };
 }
 
 @end
