@@ -7,6 +7,7 @@
 
 #import <objc/message.h>
 #import "NSObject+JDOneWayBinding.h"
+#import "NSObject+JDObservation.h"
 
 
 static char bindingsKey;
@@ -27,32 +28,23 @@ static char bindingsKey;
         keyPaths = theKeyPaths;
         transform = aTransform;
         skipEqualsCheck = skipEqualsCheckVal;
-        for (NSString *keyPath in keyPaths) {
-            [sender addObserver:self forKeyPath:keyPath options:NSKeyValueObservingOptionNew+NSKeyValueObservingOptionOld context:nil];
-        }
+        [sender observeKeyPaths:keyPaths withObserver:self withSelector:@selector(valueHasChanged:keyPath:change:) options:0 skipEqualsCheckVal:skipEqualsCheck];
         [self setNewValue];
-        //NSLog(@"Init OneWayBinding: %@ -> %@ %d %d", keyPath, propertyName, (int)self, (int)sender);
     }
     return self;
 }
 
 - (void)dealloc
 {
-    //NSLog(@"Dealloc OneWayBinding: %@ -> %@ %d %d", keyPath, propertyName, (int)self, (int)sender);
-    for (NSString *keyPath in keyPaths) {
-        [sender removeObserver:self forKeyPath:keyPath];
-    }
+    [sender unobserveKeyPaths:keyPaths withObserver:self withSelector:@selector(valueHasChanged:keyPath:change:)];
 }
 
-- (void)observeValueForKeyPath:(NSString *)aKeyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context
+- (void)valueHasChanged:(id)object keyPath:(NSString *)aKeyPath change:(NSDictionary *)change
 {
-    if (object != sender || ![keyPaths containsObject:aKeyPath]) return;
     id newValue = [change objectForKey:NSKeyValueChangeNewKey];
     BOOL isImmutable = ([newValue isKindOfClass:([NSString class])] || [newValue isKindOfClass:([NSNumber class])] || [newValue isKindOfClass:([NSValue class])]);
-    if (skipEqualsCheck ||
-        (isImmutable && ![[change objectForKey:NSKeyValueChangeNewKey] isEqual:[change objectForKey:NSKeyValueChangeOldKey]]) ||
+    if ((isImmutable && ![[change objectForKey:NSKeyValueChangeNewKey] isEqual:[change objectForKey:NSKeyValueChangeOldKey]]) ||
         (!isImmutable && [change objectForKey:NSKeyValueChangeNewKey] != [change objectForKey:NSKeyValueChangeOldKey])) {
-        //NSLog(@"Notification in OneWayBinding: %@ -> %@ (%@)", keyPath, propertyName, isImmutable ? @"immutable" : @"mutable");
         [self setNewValue];
     }
 }
@@ -109,7 +101,6 @@ static char bindingsKey;
 
 - (void)bind:(NSString *)property toObject:(NSObject *)object withKeyPaths:(NSArray *)keyPaths withTransform:(JDTransformBlockType)transform skipEqualsCheckVal:(BOOL)skipEqualsCheckVal
 {
-    //NSLog(@"bind %@ to %@", property, keyPath);
     NSMutableDictionary *bindings = objc_getAssociatedObject(self, &bindingsKey);
     if (bindings == nil) {
         bindings = [NSMutableDictionary dictionary];

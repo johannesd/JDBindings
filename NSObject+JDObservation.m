@@ -16,6 +16,7 @@ static char observersKey;
            andSelector:(SEL)aSelector
             andKeyPath:(NSString *)aKeyPath
              andSender:(NSObject *)aSender
+               options:(NSKeyValueObservingOptions)theOptions
        skipEqualsCheck:(BOOL)skipEqualsCheckVal
 {
     if (self = [super init]) {
@@ -23,37 +24,56 @@ static char observersKey;
         keyPath = aKeyPath;
         sender = aSender;
         selector = aSelector;
+        selectorContainsChange = [NSStringFromSelector(selector) componentsSeparatedByString:@":"].count > 3;
+        
+        invocation = [NSInvocation invocationWithMethodSignature:[receiver methodSignatureForSelector:selector]];
+        [invocation setSelector:selector];
+        [invocation setTarget:receiver];
+        [invocation setArgument:&sender atIndex:2];
+        [invocation setArgument:&keyPath atIndex:3];
+
+        options = theOptions;
         skipEqualsCheck = skipEqualsCheckVal;
-        [sender addObserver:self forKeyPath:keyPath options:NSKeyValueObservingOptionNew+NSKeyValueObservingOptionOld context:nil];
+        [self createObserver];
     }
     return self;
 }
 
-- (void)dealloc
+- (void)destroy
+{
+    [self deleteObserver];
+}
+
+- (void)createObserver
+{
+    [sender addObserver:self
+             forKeyPath:keyPath
+                options:options+NSKeyValueObservingOptionNew+NSKeyValueObservingOptionOld
+                context:nil];
+}
+
+- (void)deleteObserver
 {
     [sender removeObserver:self forKeyPath:keyPath];
 }
 
 - (void)observeValueForKeyPath:(NSString *)aKeyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context
 {
-    //NSLog(@"Notification in Observation: %@ %@", NSStringFromSelector(selector), keyPath);
     if (object != sender || ![aKeyPath isEqualToString:keyPath]) return;
+    [self valueChanged:change];
+}
+
+- (void)valueChanged:(NSDictionary *)change
+{
     id newValue = [change objectForKey:NSKeyValueChangeNewKey];
     BOOL isImmutable = ([newValue isKindOfClass:([NSString class])] || [newValue isKindOfClass:([NSNumber class])]);
     if (skipEqualsCheck ||
         (isImmutable && ![[change objectForKey:NSKeyValueChangeNewKey] isEqual:[change objectForKey:NSKeyValueChangeOldKey]]) ||
         (!isImmutable && [change objectForKey:NSKeyValueChangeNewKey] != [change objectForKey:NSKeyValueChangeOldKey])) {
-//    if (![[change objectForKey:NSKeyValueChangeNewKey] isEqual:[change objectForKey:NSKeyValueChangeOldKey]] ||
-//        (!isImmutable && [change objectForKey:NSKeyValueChangeNewKey] != [change objectForKey:NSKeyValueChangeOldKey])) {
-//        NSLog(@"Notification in Observation: %@", keyPath);
-//        objc_msgSend(receiver, selector, sender, keyPath);
-//        id (*response)(id, SEL, id, id) = (id (*)(id, SEL, id, id)) objc_msgSend;
-//        response(receiver, selector, sender, keyPath);
-//        [receiver performSelector:selector withObject:sender];
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-        [receiver performSelector:selector withObject:sender withObject:keyPath];
-#pragma clang diagnostic pop
+        if (selectorContainsChange) {
+            [invocation setArgument:&change atIndex:4];
+        }
+        [invocation invoke];
     }
 }
 
@@ -62,18 +82,15 @@ static char observersKey;
 
 @implementation NSObject (JDObservation)
 
+- (Class)keyPathObserverClass
+{
+    return JDKeyPathObserver.class;
+}
+
 - (void)unobserveKeyPaths:(NSArray *)keyPaths withObserver:(NSObject *)observer withSelector:(SEL)selector
 {
-    NSMutableDictionary *observers = objc_getAssociatedObject(self, &observersKey);
-    if (observers == nil) {
-        return;
-    }
     for (NSString *keyPath in keyPaths) {
-        NSArray *key = @[[NSValue valueWithNonretainedObject:observer], keyPath, NSStringFromSelector(selector)];
-        JDKeyPathObserver *keyPathObserver = [observers objectForKey:key];
-        if (keyPathObserver != nil) {
-            [observers removeObjectForKey:key];
-        }
+        [self unobserveKeyPath:keyPath withObserver:observer withSelector:selector];
     }
 }
 
@@ -86,35 +103,29 @@ static char observersKey;
     NSArray *key = @[[NSValue valueWithNonretainedObject:observer], keyPath, NSStringFromSelector(selector)];
     JDKeyPathObserver *keyPathObserver = [observers objectForKey:key];
     if (keyPathObserver != nil) {
+        [keyPathObserver destroy];
         [observers removeObjectForKey:key];
     }
 }
 
 - (void)observeKeyPaths:(NSArray *)keyPaths withObserver:(NSObject *)observer withSelector:(SEL)selector
 {
-    [self observeKeyPaths:keyPaths withObserver:observer withSelector:selector skipEqualsCheckVal:FALSE];
+    [self observeKeyPaths:keyPaths withObserver:observer withSelector:selector options:0 skipEqualsCheckVal:FALSE];
 }
 
-- (void)observeKeyPaths:(NSArray *)keyPaths withObserver:(NSObject *)observer withSelector:(SEL)selector skipEqualsCheckVal:(BOOL)skipEqualsCheckVal
+- (void)observeKeyPaths:(NSArray *)keyPaths withObserver:(NSObject *)observer withSelector:(SEL)selector options:(NSKeyValueObservingOptions)options skipEqualsCheckVal:(BOOL)skipEqualsCheckVal
 {
-    NSMutableDictionary *observers = objc_getAssociatedObject(self, &observersKey);
-    if (observers == nil) {
-        observers = [NSMutableDictionary dictionaryWithCapacity:keyPaths.count];
-        objc_setAssociatedObject(self, &observersKey, observers, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
     for (NSString *keyPath in keyPaths) {
-        NSArray *key = @[[NSValue valueWithNonretainedObject:observer], keyPath, NSStringFromSelector(selector)];
-        JDKeyPathObserver *keyPathObserver = [[JDKeyPathObserver alloc] initWithReceiver:observer andSelector:selector andKeyPath:keyPath andSender:self skipEqualsCheck:skipEqualsCheckVal];
-        [observers setObject:keyPathObserver forKey:key];
+        [self observeKeyPath:keyPath withObserver:observer withSelector:selector options:options skipEqualsCheckVal:skipEqualsCheckVal];
     }
 }
 
 - (void)observeKeyPath:(NSString *)keyPath withObserver:(NSObject *)observer withSelector:(SEL)selector
 {
-    [self observeKeyPath:keyPath withObserver:observer withSelector:selector skipEqualsCheckVal:FALSE];
+    [self observeKeyPath:keyPath withObserver:observer withSelector:selector options:0 skipEqualsCheckVal:FALSE];
 }
 
-- (void)observeKeyPath:(NSString *)keyPath withObserver:(NSObject *)observer withSelector:(SEL)selector skipEqualsCheckVal:(BOOL)skipEqualsCheckVal
+- (void)observeKeyPath:(NSString *)keyPath withObserver:(NSObject *)observer withSelector:(SEL)selector options:(NSKeyValueObservingOptions)options skipEqualsCheckVal:(BOOL)skipEqualsCheckVal
 {
     NSMutableDictionary *observers = objc_getAssociatedObject(self, &observersKey);
     if (observers == nil) {
@@ -122,7 +133,7 @@ static char observersKey;
         objc_setAssociatedObject(self, &observersKey, observers, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     NSArray *key = @[[NSValue valueWithNonretainedObject:observer], keyPath, NSStringFromSelector(selector)];
-    JDKeyPathObserver *keyPathObserver = [[JDKeyPathObserver alloc] initWithReceiver:observer andSelector:selector andKeyPath:keyPath andSender:self skipEqualsCheck:skipEqualsCheckVal];
+    JDKeyPathObserver *keyPathObserver = [[self.keyPathObserverClass alloc] initWithReceiver:observer andSelector:selector andKeyPath:keyPath andSender:self options:options skipEqualsCheck:skipEqualsCheckVal];
     [observers setObject:keyPathObserver forKey:key];
 }
 
