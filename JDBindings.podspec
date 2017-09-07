@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name         = "JDBindings"
-  s.version      = "0.0.1"
+  s.version      = "0.1.0"
   s.summary      = "Class extensions for NSObject for easier KVO and bindings."
   s.description  = <<-DESC
                    Class extensions for NSObject for easier KVO and bindings.
