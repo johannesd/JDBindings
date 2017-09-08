@@ -24,13 +24,13 @@ static char observersKey;
         keyPath = aKeyPath;
         sender = aSender;
         selector = aSelector;
+        selectorContainsKeyPath = [NSStringFromSelector(selector) componentsSeparatedByString:@":"].count > 2;
         selectorContainsChange = [NSStringFromSelector(selector) componentsSeparatedByString:@":"].count > 3;
         
         invocation = [NSInvocation invocationWithMethodSignature:[receiver methodSignatureForSelector:selector]];
         [invocation setSelector:selector];
         [invocation setTarget:receiver];
         [invocation setArgument:&sender atIndex:2];
-        [invocation setArgument:&keyPath atIndex:3];
 
         options = theOptions;
         skipEqualsCheck = skipEqualsCheckVal;
@@ -39,9 +39,22 @@ static char observersKey;
     return self;
 }
 
+- (void)dealloc
+{
+    [self destroy];
+    [self destroyOnDealloc];
+}
+
+- (void)destroyOnDealloc
+{
+    [sender removeObserver:self forKeyPath:keyPath];
+}
+
 - (void)destroy
 {
-    [self deleteObserver];
+    if (isObserving) {
+        [self deleteObserver];
+    }
 }
 
 - (void)createObserver
@@ -50,11 +63,13 @@ static char observersKey;
              forKeyPath:keyPath
                 options:options+NSKeyValueObservingOptionNew+NSKeyValueObservingOptionOld
                 context:nil];
+    isObserving = TRUE;
 }
 
 - (void)deleteObserver
 {
-    [sender removeObserver:self forKeyPath:keyPath];
+//    [sender removeObserver:self forKeyPath:keyPath];
+    isObserving = FALSE;
 }
 
 - (void)observeValueForKeyPath:(NSString *)aKeyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context
@@ -65,11 +80,17 @@ static char observersKey;
 
 - (void)valueChanged:(NSDictionary *)change
 {
+    if (!isObserving) {
+        return;
+    }
     id newValue = [change objectForKey:NSKeyValueChangeNewKey];
     BOOL isImmutable = ([newValue isKindOfClass:([NSString class])] || [newValue isKindOfClass:([NSNumber class])]);
     if (skipEqualsCheck ||
         (isImmutable && ![[change objectForKey:NSKeyValueChangeNewKey] isEqual:[change objectForKey:NSKeyValueChangeOldKey]]) ||
         (!isImmutable && [change objectForKey:NSKeyValueChangeNewKey] != [change objectForKey:NSKeyValueChangeOldKey])) {
+        if (selectorContainsKeyPath) {
+            [invocation setArgument:&keyPath atIndex:3];
+        }
         if (selectorContainsChange) {
             [invocation setArgument:&change atIndex:4];
         }
@@ -123,6 +144,11 @@ static char observersKey;
 - (void)observeKeyPath:(NSString *)keyPath withObserver:(NSObject *)observer withSelector:(SEL)selector
 {
     [self observeKeyPath:keyPath withObserver:observer withSelector:selector options:0 skipEqualsCheckVal:FALSE];
+}
+
+- (void)observeKeyPath:(NSString *)keyPath withObserver:(NSObject *)observer withSelector:(SEL)selector skipEqualsCheckVal:(BOOL)skipEqualsCheckVal
+{
+    [self observeKeyPath:keyPath withObserver:observer withSelector:selector options:0 skipEqualsCheckVal:skipEqualsCheckVal];
 }
 
 - (void)observeKeyPath:(NSString *)keyPath withObserver:(NSObject *)observer withSelector:(SEL)selector options:(NSKeyValueObservingOptions)options skipEqualsCheckVal:(BOOL)skipEqualsCheckVal

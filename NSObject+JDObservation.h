@@ -12,7 +12,9 @@
 {
     __weak NSObject *receiver;
     SEL selector;
+    BOOL selectorContainsKeyPath;
     BOOL selectorContainsChange;
+    BOOL isObserving;
     NSInvocation *invocation;
     NSString *keyPath;
     __unsafe_unretained NSObject *sender;
@@ -41,6 +43,7 @@
 - (void)observeKeyPaths:(NSArray *)keyPaths withObserver:(NSObject *)observer withSelector:(SEL)selector;
 - (void)observeKeyPaths:(NSArray *)keyPaths withObserver:(NSObject *)observer withSelector:(SEL)selector options:(NSKeyValueObservingOptions)options skipEqualsCheckVal:(BOOL)skipEqualsCheckVal;
 - (void)observeKeyPath:(NSString *)keyPath withObserver:(NSObject *)observer withSelector:(SEL)selector;
+- (void)observeKeyPath:(NSString *)keyPath withObserver:(NSObject *)observer withSelector:(SEL)selector skipEqualsCheckVal:(BOOL)skipEqualsCheckVal;
 - (void)observeKeyPath:(NSString *)keyPath withObserver:(NSObject *)observer withSelector:(SEL)selector options:(NSKeyValueObservingOptions)options skipEqualsCheckVal:(BOOL)skipEqualsCheckVal;
 
 @end
